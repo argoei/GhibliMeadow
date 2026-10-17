@@ -27,8 +27,8 @@ mkdir "%STAGE%"
 
 copy /y "%RT%" "%STAGE%\" >nul
 copy /y "%WV2%" "%STAGE%\" >nul
-copy /y "deps\install-deps.cmd" "%STAGE%\" >nul
-copy /y "deps\README-deps.txt" "%STAGE%\" >nul
+copy /y "installer\install-deps.cmd" "%STAGE%\" >nul
+copy /y "installer\README-deps.txt" "%STAGE%\" >nul
 
 if exist "%OUT%" del /q "%OUT%"
 powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%\*' -DestinationPath '%OUT%' -Force"
