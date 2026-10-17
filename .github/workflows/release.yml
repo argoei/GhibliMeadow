@@ -32,7 +32,8 @@ jobs:
 
       - name: 编译主程序安装包
         shell: cmd
-        run: "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe" installer\\GhibliMeadow.iss
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\GhibliMeadow.iss
 
       - name: 下载并打包依赖分发包
         shell: pwsh
