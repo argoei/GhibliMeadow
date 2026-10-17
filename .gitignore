@@ -1,0 +1,29 @@
+# 构建产物
+bin/
+obj/
+dist/
+release/
+*.user
+*.suo
+.vs/
+
+# 依赖安装器（56 MB，按 README 从官方地址下载，不进版本库）
+deps/
+
+# 便携压缩包
+GhibliMeadow-v*-win-x64.zip
+
+# 安装器编译日志
+installer/build.log
+
+# 系统与编辑器
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 开发过程文件：调试截图、内部审计、提示词原文、代码草稿，不进公开仓库
+预览图/
+提示词原文整理.md
+崩溃风险审计.md
+任务计划拦截-排查记录.md
+assets/flowers-*.js.txt

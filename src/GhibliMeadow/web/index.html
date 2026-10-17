@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>天空与草原 · 动态壁纸</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    /* 与场景顶部天空同色：页面尚未绘制时露出的底色必须和成品一致，
+       否则开机瞬间会闪一下不相关的颜色 */
+    background: #1E79D2;
+    cursor: default; user-select: none;
+  }
+  #scene { display: block; width: 100%; height: 100%; }
+  /* 起始遮罩：色带按默认地平线 0.55 逐段对齐全场景色，
+     所以它淡出时看不出任何跳变。 */
+  #boot {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(180deg,
+      #1E79D2 0%, #74B9E8 30%, #A6D2E8 46%, #D2E8EE 55%,
+      #C8DE92 57%, #B4D478 64%, #9FC85F 74%, #8ABA4C 87%, #74A63A 100%);
+    color: #FFFFFF; letter-spacing: .28em; font-size: 13px;
+    text-shadow: 0 1px 3px rgba(20, 50, 80, .45);
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    transition: opacity .3s ease; z-index: 10;
+  }
+  #boot.hide { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="boot">正在铺开草原…</div>
+<script src="meadow.js"></script>
+</body>
+</html>

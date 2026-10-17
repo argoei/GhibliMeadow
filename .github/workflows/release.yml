@@ -1,0 +1,71 @@
+name: Build & Release
+
+# 打 v* 标签（如 v1.0.0）或手动触发时，构建主程序安装包与依赖分发包并发布到 Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 发布主程序（框架依赖）
+        shell: cmd
+        run: |
+          dotnet publish src/GhibliMeadow -c Release -r win-x64 --self-contained false -o release/app -p:DebugType=none -p:DebugSymbols=false
+          copy /y assets\*.cmd release\app\ >nul
+          copy /y assets\*.ps1 release\app\ >nul
+
+      - name: 安装 Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: 编译主程序安装包
+        shell: cmd
+        run: "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe" installer\\GhibliMeadow.iss
+
+      - name: 下载并打包依赖分发包
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force deps | Out-Null
+          Invoke-WebRequest "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.32/windowsdesktop-runtime-8.0.32-win-x64.exe" -OutFile deps\windowsdesktop-runtime-8.0.32-win-x64.exe
+          Invoke-WebRequest "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile deps\MicrosoftEdgeWebview2Setup.exe
+          cmd /c package-deps.cmd
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: |
+            release/GhibliMeadow-Setup-*.exe
+            release/GhibliMeadow-Deps-*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            GhibliMeadow-Setup-*.exe
+            GhibliMeadow-Deps-*.zip
+          generate_release_notes: true

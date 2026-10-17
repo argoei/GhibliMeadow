@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>GhibliMeadow</AssemblyName>
+    <RootNamespace>GhibliMeadow</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 应用图标：由 make_icon.py 从壁纸主图生成（多尺寸 ICO） -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
+    <Version>1.0.0</Version>
+    <!-- 显示名与 AppConfig.AppName 保持一致（主题改名时两处都要改） -->
+    <Product>天空与草原 · 动态壁纸</Product>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- WebView2 包同时带来 WPF 程序集，会与 net8 的 WindowsBase 版本冲突；
+         本项目只用 Core / WinForms，把该冲突降级为消息即可 -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+    <!-- WFAC010：WinForms 分析器建议把高 DPI 设置从 app.manifest 挪到
+         Application.SetHighDpiMode / ApplicationHighDpiMode 属性。**本项目不能照做**：
+         主窗口是自行 CreateWindowEx 创建的裸 HWND（见 RawWindow.cs），不是 WinForms Form，
+         进程 DPI 感知必须由清单在启动时就确定，否则 Screen.Bounds 可能返回被虚拟化的坐标，
+         多显示器对齐（本项目核心特性，判据见 README）会失效。
+         manifest 里的 PerMonitorV2 与 Program.cs 的 SetHighDpiMode(PerMonitorV2) 取值一致，
+         两处并不冲突，因此这里显式忽略该建议性警告。 -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="web\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>
