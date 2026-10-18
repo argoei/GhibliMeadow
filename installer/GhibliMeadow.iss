@@ -1,6 +1,6 @@
 ﻿; GhibliMeadow 安装脚本（Inno Setup 6）—— 框架依赖版
 ; 编译：ISCC.exe installer\GhibliMeadow.iss
-; 产物：release\GhibliMeadow-Setup-1.0.0.exe
+; 产物：release\GhibliMeadow-Setup-1.0.1.exe
 ;
 ; 本包【不含】.NET 运行时。必需依赖：
 ;   Microsoft.WindowsDesktop.App 8.0.x（.NET 8 Desktop Runtime，x64）
@@ -9,7 +9,7 @@
 ; 注意：本文件必须以 UTF-8 with BOM 保存，否则中文界面与中文文件名会乱码。
 
 #define MyAppName "天空与草原 · 动态壁纸"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppExeName "GhibliMeadow.exe"
 #define MyAppPublisher "GhibliMeadow"
 #define MyAppURL "https://github.com/argoei/GhibliMeadow"
@@ -73,7 +73,12 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "立即启动壁纸"; Flags: nowait postinstall skipifsilent
+; 用 cmd /c start 让壁纸进程脱离安装器的进程树。
+; 直接 Exec 时，安装器退出可能连带终止子进程，
+; 表现为「点了立即启动，界面闪一下就没有了」。
+Filename: "{cmd}"; Parameters: "/c start """" ""{app}\{#MyAppExeName}"""; \
+    WorkingDir: "{app}"; Description: "立即启动壁纸"; \
+    Flags: nowait postinstall skipifsilent runhidden
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#MyAppExeName}"; \

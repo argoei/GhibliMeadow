@@ -11,7 +11,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-set OUT=GhibliMeadow-v1.0.0-win-x64.zip
+set OUT=GhibliMeadow-v1.0.1-win-x64.zip
 if exist "%OUT%" del /q "%OUT%"
 
 rem Zip the CONTENTS of dist (not the dist folder itself), so unzipping

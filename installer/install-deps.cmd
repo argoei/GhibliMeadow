@@ -28,6 +28,6 @@ if exist "MicrosoftEdgeWebview2Setup.exe" (
 )
 echo.
 
-echo Done. Now run GhibliMeadow-Setup-1.0.0.exe
+echo Done. Now run GhibliMeadow-Setup-1.0.1.exe
 echo If the runtime was just installed, a reboot may be required.
 pause

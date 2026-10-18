@@ -14,14 +14,14 @@
 
 | 包 | 文件名 | 体积 | 内容 |
 | --- | --- | --- | --- |
-| 主程序 | `GhibliMeadow-Setup-1.0.0.exe` | **2.4 MB** | 壁纸本体 |
-| 依赖包 | `GhibliMeadow-Deps-8.0.32-win-x64.zip` | **56 MB** | .NET 8 Desktop Runtime + WebView2 Bootstrapper |
+| 主程序 | `GhibliMeadow-Setup-1.0.1.exe` | **2.7 MB** | 壁纸本体 |
+| 依赖包 | `GhibliMeadow-Deps-8.0.32-win-x64.zip` | **58 MB** | .NET 8 Desktop Runtime + WebView2 Bootstrapper |
 
 **首次安装**：
 
 1. 从 [Releases](../../releases/latest) 把两个文件都下载下来
 2. 解压依赖包，把里面的两个安装器**与主程序放到同一目录**
-3. 双击 `GhibliMeadow-Setup-1.0.0.exe`
+3. 双击 `GhibliMeadow-Setup-1.0.1.exe`
 
 安装器会先检测依赖：缺失时提示并自动调用同目录的安装器，装完继续装主程序；已装则直接跳过。
 
@@ -29,7 +29,7 @@
 
 装完会自动启动。程序没有主窗口，请在**系统托盘**找那个花形图标。
 
-**便携版**：下载 `GhibliMeadow-v1.0.0-win-x64.zip`，解压到任意目录，双击 `启动壁纸.cmd`（同样需要 .NET 8 运行时）。
+**便携版**：下载 `GhibliMeadow-v1.0.1-win-x64.zip`，解压到任意目录，双击 `启动壁纸.cmd`（同样需要 .NET 8 运行时）。
 
 ---
 
@@ -98,7 +98,7 @@
 
 | 主程序版本 | 目标框架 | 需要的运行时 | 已验证的运行时 |
 | --- | --- | --- | --- |
-| 1.0.0 | `net8.0-windows` | .NET 8 Desktop Runtime ≥ 8.0.0 | 8.0.31（开发机）、8.0.32（随包） |
+| 1.0.1 | `net8.0-windows` | .NET 8 Desktop Runtime ≥ 8.0.0 | 8.0.31（开发机）、8.0.32（随包） |
 
 规则说明：
 
