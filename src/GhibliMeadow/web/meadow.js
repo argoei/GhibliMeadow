@@ -89,6 +89,8 @@ const CFG = {
   planes: qbool('planes', true),                      // 天空中的客机与云迹
   egg: qbool('egg', true),                            // 彩蛋：点中客机洒彩纸
   planeInterval: clamp(qnum('planeInterval', 70), 2, 600), // 客机平均间隔（秒），实际取 0.43~1.57 倍
+  biplane: qbool('biplane', true),                    // 低空红色双翼机（点它触发飞行员跳伞）
+  biplaneInterval: clamp(qnum('biplaneInterval', 60), 15, 600), // 双翼机平均间隔（秒），实际取 0.5~1.6 倍
   animals: qbool('animals', true),                    // 远景的牛羊
   animalDensity: clamp(qnum('animalDensity', 1), 0, 2.5),
   horizon: clamp(qnum('horizon', 0.55), 0.30, 0.75),  // 地平线位置（占屏高比例）
@@ -747,6 +749,13 @@ function buildScene() {
   planes = [];
   planeRnd = mulberry32((CFG.seed ^ 0x5E11) >>> 0);
   nextPlaneAt = rnd(planeRnd, 0.10, 0.30) * CFG.planeInterval;   // 首架别让人等太久
+
+  /* 低空双翼机：同样清空重来。首架 8~20 秒内出现，不用干等 */
+  biplanes = [];
+  biplaneRnd = mulberry32((CFG.seed ^ 0x7D3F) >>> 0);
+  paratroopers = [];
+  nextBiplaneAt = rnd(biplaneRnd, 8, 20);
+
 }
 
 /* 前景草叶带：贴在屏幕最下沿，横向无缝 */
@@ -1483,6 +1492,310 @@ function drawPlanes(g, t) {
 }
 
 /* =========================================================================
+ * 9.5 低空红色双翼机 + 飞行员跳伞
+ * -------------------------------------------------------------------------
+ * 一架红色双翼螺旋桨飞机在**屏幕中部偏下、贴着地平线上方**低空掠过（比例
+ * y ∈ [0.86, 0.94]，即屏幕 y ≈ 0.47~0.52 VH）。随机出现、屏幕内至多一架 ——
+ * 这一点靠"上一架完全飞出屏幕后才允许生成下一架"保证，不是靠计数上限。
+ *
+ * 点中它触发彩蛋：飞行员从座舱弹出，先向上抛一下 → 自由落体 → 开伞 →
+ * 飘落 → 落地收伞站起 → 渐隐。飞机无人驾驶继续飞出屏幕。
+ *
+ * 跳伞沿用第 11 节的坐标约定（x 世界坐标 + 屏幕像素 y），重力与 confetti
+ * 共用 CONF_G，开伞后的垂直终端速度另设 CHUTE_VY。
+ * ======================================================================= */
+const BIPLANE_Y_LO = 0.86;   // 基础高度比例下限（贴地平线上方掠过）
+const BIPLANE_Y_HI = 0.94;
+const CM_TO_PX = 96 / 2.54;  // 1 厘米 ≈ 37.8 物理像素（96 DPI 基准，高分屏再乘 uiScale）
+const CHUTE_VY = 35;         // 开伞后的垂直终端速度（世界单位/秒）
+const CHUTE_VX = 22;         // 随风横向漂移速度（世界单位/秒）
+let biplanes = [];
+let nextBiplaneAt = 0;
+let biplaneRnd = mulberry32(0x7D3F);
+let paratroopers = [];
+
+function spawnBiplane(t, r) {
+  const dir = r() < 0.5 ? 1 : -1;
+  /* 在基础高度区间上，每架再随机抬升 2~3 厘米：厘米按 96 DPI 折算物理像素，
+   * 乘 uiScale 在高分屏自动补偿，除以 HY 转回高度比例。 */
+  const lift = rnd(r, 2, 3) * CM_TO_PX * uiScale / HY;
+  biplanes.push({
+    x: dir > 0 ? CFG.ox - 0.16 * VW : CFG.ox + 1.16 * VW,
+    y: rnd(r, BIPLANE_Y_LO, BIPLANE_Y_HI) - lift,
+    vx: dir * rnd(r, 60, 110) * uiScale,   // 低空近景，比高空客机稍快
+    s: rnd(r, 0.9, 1.15) * 1.3 * uiScale,  // 尺寸 +30%；飞行员继承 b.s，随飞机一起放大
+    flip: dir,
+    prop: r() * TAU,                        // 螺旋桨相位
+    propSpd: rnd(r, 22, 30),                // 螺旋桨转速（rad/s）
+    ejected: false,                         // 是否已触发跳伞
+  });
+}
+
+function updateBiplanes(dt, t, r) {
+  if (CFG.biplane && t >= nextBiplaneAt && biplanes.length < 1) {
+    spawnBiplane(t, r);
+    /* 间隔在均值的 0.5~1.6 倍之间随机 —— 与客机的"不定时"同一条思路 */
+    nextBiplaneAt = t + CFG.biplaneInterval * rnd(r, 0.5, 1.6);
+  } else if (!CFG.biplane) {
+    nextBiplaneAt = Math.max(nextBiplaneAt, t + CFG.biplaneInterval);
+  }
+  for (let i = biplanes.length - 1; i >= 0; i--) {
+    const b = biplanes[i];
+    b.x += b.vx * dt;
+    b.prop += b.propSpd * dt;
+    const sx = b.x - CFG.ox;
+    if (sx < -0.30 * VW || sx > 1.30 * VW) biplanes.splice(i, 1);
+  }
+}
+
+/** 机头朝 +x 的侧视双翼机，原点在机身中心。 */
+function drawBiplaneBody(g, b) {
+  /* 螺旋桨盘（机头前方）：半透明残影 + 绕机头旋转的桨叶 */
+  const px = 14.5, py = 0;
+  g.fillStyle = 'rgba(120,120,130,0.22)';
+  g.beginPath(); g.arc(px, py, 5.4, 0, TAU); g.fill();
+  const ca = Math.cos(b.prop), sa = Math.sin(b.prop);
+  g.strokeStyle = '#4A4A4A'; g.lineWidth = 1.8; g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(px - ca * 5.4, py - sa * 5.4);
+  g.lineTo(px + ca * 5.4, py + sa * 5.4);
+  g.stroke();
+
+  /* 机身：红色胶囊，机头尖、机尾收 */
+  g.fillStyle = '#E23B3B';
+  g.beginPath();
+  g.moveTo(16.5, 0);
+  g.quadraticCurveTo(16.5, -2.9, 8, -3.1);
+  g.lineTo(-10, -2.6);
+  g.quadraticCurveTo(-14, -2.2, -14, 0);
+  g.quadraticCurveTo(-14, 2.2, -10, 2.6);
+  g.lineTo(8, 3.1);
+  g.quadraticCurveTo(16.5, 2.9, 16.5, 0);
+  g.closePath(); g.fill();
+  /* 机身下缘暗部 */
+  g.fillStyle = 'rgba(90,10,10,0.28)';
+  g.beginPath();
+  g.moveTo(9, 3.1); g.lineTo(-10, 2.6);
+  g.quadraticCurveTo(-14, 2.2, -14, 0);
+  g.quadraticCurveTo(-13, 1.4, -5, 1.6);
+  g.lineTo(9, 1.5); g.closePath(); g.fill();
+
+  /* 下翼（贴机身下方、略窄） */
+  g.fillStyle = '#C82E2E';
+  g.beginPath();
+  g.moveTo(7, 1.6); g.lineTo(7, 3.9); g.lineTo(-9, 3.9); g.lineTo(-9.5, 1.6);
+  g.closePath(); g.fill();
+  /* 上翼（机身正上方、更靠上） */
+  g.fillStyle = '#D43A3A';
+  g.beginPath();
+  g.moveTo(9, -5.6); g.lineTo(9, -8.4); g.lineTo(-10, -8.4); g.lineTo(-10.5, -5.6);
+  g.closePath(); g.fill();
+
+  /* 翼间支柱：三根 N 型支柱，双翼机的标志性结构 */
+  g.strokeStyle = '#5A2E1E'; g.lineWidth = 1.15; g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(6, -5.6); g.lineTo(6, 1.6);
+  g.moveTo(-1, -5.6); g.lineTo(-1, 1.6);
+  g.moveTo(-8, -5.6); g.lineTo(-8, 1.6);
+  g.stroke();
+
+  /* 机尾：水平尾翼 + 垂直方向舵 */
+  g.fillStyle = '#E23B3B';
+  g.beginPath();
+  g.moveTo(-12, -1); g.lineTo(-16.5, -3); g.lineTo(-16.5, -0.5); g.lineTo(-12, 0.2);
+  g.closePath(); g.fill();
+  g.beginPath();
+  g.moveTo(-13, -2.2); g.lineTo(-15, -6.2); g.lineTo(-13.6, -6.2); g.lineTo(-12.4, -2.2);
+  g.closePath(); g.fill();
+
+  /* 起落架轮子 */
+  g.fillStyle = '#333';
+  g.beginPath(); g.arc(-3.5, 4.9, 1.5, 0, TAU); g.fill();
+  g.beginPath(); g.arc(5, 4.9, 1.5, 0, TAU); g.fill();
+
+  /* 座舱里的飞行员：跳伞离机后不再画（上翼在其上方，不再遮挡） */
+  if (!b.ejected) {
+    g.fillStyle = '#FFE0C0';                 // 脸
+    g.beginPath(); g.arc(0.5, -4.2, 2.1, 0, TAU); g.fill();
+    g.fillStyle = '#8B5A2B';                 // 头盔/护目镜带
+    g.beginPath(); g.arc(0.5, -4.4, 2.1, Math.PI, TAU); g.fill();
+    g.fillStyle = '#5A3A1E';                 // 衣服
+    g.fillRect(-1.6, -2.4, 4.2, 3.6);
+  }
+}
+
+function drawBiplanes(g, t) {
+  if (!biplanes.length) return;
+  for (const b of biplanes) {
+    const sx = b.x - CFG.ox;
+    if (sx < -120 || sx > VW + 120) continue;
+    g.save();
+    g.translate(sx, b.y * HY);
+    g.scale(b.s * b.flip, b.s);
+    drawBiplaneBody(g, b);
+    g.restore();
+    drawCalls++;
+  }
+  g.setTransform(DBASE, 0, 0, DBASE, 0, 0);
+}
+
+/* ------------------------------------------------------------ 跳伞飞行员 */
+
+/** 飞行员从座舱弹出：继承机速（水平），垂直先向上抛一下再进入自由落体。 */
+function spawnParatrooper(b, r) {
+  paratroopers.push({
+    x: b.x,
+    y: b.y * HY,                               // 出舱点（屏幕像素 y）
+    vx: b.vx,
+    vy: -rnd(r, 40, 80) * uiScale,             // 出舱向上抛
+    s: b.s,
+    state: 'eject',                            // eject → fall → deploy → descend → land → fade
+    t: 0,
+    chute: 0,                                  // 伞展开程度 0~1
+    landY: HY + GH * rnd(r, 0.20, 0.32),       // 落地（草地中前部，给飘落留出高度差）
+    sway: r() * TAU,
+    windDrift: rnd(r, 0.4, 1.2),
+    fade: 1,
+  });
+}
+
+function updateParatroopers(dt, t) {
+  for (let i = paratroopers.length - 1; i >= 0; i--) {
+    const p = paratroopers[i];
+    p.t += dt;
+    switch (p.state) {
+      case 'eject':
+        /* 出舱：先上抛，重力略弱，0.4s 后进入自由落体 */
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += CONF_G * 0.4 * dt;
+        if (p.t > 0.4) { p.state = 'fall'; p.t = 0; }
+        break;
+      case 'fall':
+        /* 自由落体：伞未开，重力稍弱（低空跳伞本来下落就短，压着点别一下落完） */
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += CONF_G * 0.8 * dt;
+        p.vx *= (1 - 0.3 * dt);
+        if (p.t > 0.5) { p.state = 'deploy'; p.t = 0; }
+        break;
+      case 'deploy':
+        /* 开伞：伞 0→1 展开，垂直速度向终端速度收敛，水平速度向漂移收敛 */
+        p.chute = Math.min(1, p.t / 0.5);
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += (CHUTE_VY - p.vy) * Math.min(1, 4 * dt);
+        p.vx += (CHUTE_VX * p.windDrift - p.vx) * Math.min(1, 3 * dt);
+        if (p.chute >= 1) { p.state = 'descend'; p.t = 0; }
+        break;
+      case 'descend':
+        /* 飘落：接近匀速，横向轻微摆动，落地判定 */
+        p.sway += dt;
+        p.vx = CHUTE_VX * p.windDrift + Math.sin(p.sway * 1.4) * 14;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (p.y >= p.landY) { p.y = p.landY; p.state = 'land'; p.t = 0; }
+        break;
+      case 'land':
+        /* 触地：收伞 + 站稳，0.9s 后进入渐隐 */
+        p.chute = Math.max(0, 1 - p.t / 0.55);
+        p.vx = 0;
+        if (p.t > 0.9) { p.state = 'fade'; p.t = 0; }
+        break;
+      case 'fade':
+        /* 站定渐隐 1.0s 后移除 */
+        p.fade = 1 - p.t / 1.0;
+        if (p.t > 1.0) { paratroopers.splice(i, 1); continue; }
+        break;
+    }
+  }
+}
+
+/** 降落伞：红色半圆伞顶 + 白色分瓣 + 伞绳，展开程度由 chute 控制。 */
+function drawChute(g, x, y, chute, s) {
+  const len = 24 * s;                 // 伞绳长度
+  const cy = y - len;                 // 伞顶圆心（伞底缘所在高度）
+  const R = 17 * s * chute;           // 伞半径（随展开增大）
+  /* 伞绳：从伞底缘放射状连到身体肩部 */
+  g.strokeStyle = 'rgba(70,70,80,0.65)';
+  g.lineWidth = 0.8;
+  g.beginPath();
+  for (const k of [-0.85, -0.42, 0, 0.42, 0.85]) {
+    g.moveTo(x + k * R, cy);
+    g.lineTo(x, y - 4 * s);
+  }
+  g.stroke();
+  /* 红色伞顶：上半圆，底缘向内微收（真实伞的下缘不是一条直线） */
+  g.fillStyle = '#E23B3B';
+  g.beginPath();
+  g.moveTo(x - R, cy);
+  g.arc(x, cy, R, Math.PI, 0);                    // 上半圆（左缘 → 顶 → 右缘）
+  g.quadraticCurveTo(x, cy + R * 0.18, x - R, cy); // 底缘微收
+  g.closePath(); g.fill();
+  /* 白色分瓣：从伞顶放射到伞缘，经典的红白条纹 */
+  g.strokeStyle = 'rgba(255,255,255,0.9)';
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.moveTo(x, cy - R);
+  g.quadraticCurveTo(x - R * 0.55, cy - R * 0.55, x - R, cy);
+  g.moveTo(x, cy - R);
+  g.quadraticCurveTo(x, cy - R * 0.2, x, cy);
+  g.moveTo(x, cy - R);
+  g.quadraticCurveTo(x + R * 0.55, cy - R * 0.55, x + R, cy);
+  g.stroke();
+}
+
+/** 飞行员小人：按姿态摆姿势。以脚底为原点。 */
+function drawParatrooperBody(g, p) {
+  let pose = 0;                         // 0 = 自由落体大字型，1 = 飘落拉伞绳，2 = 站起
+  if (p.state === 'descend') pose = 1;
+  else if (p.state === 'land' || p.state === 'fade') pose = 2;
+  g.fillStyle = '#FFE0C0';
+  g.beginPath(); g.arc(0, -7.5, 2.5, 0, TAU); g.fill();   // 头
+  g.fillStyle = '#2E6B2E';
+  g.fillRect(-2.4, -5.2, 4.8, 5.6);                        // 躯干
+  g.strokeStyle = '#2E6B2E'; g.lineWidth = 2; g.lineCap = 'round';
+  g.beginPath();
+  if (pose === 0) {
+    g.moveTo(0, -4.6); g.lineTo(-5, -8);   // 左臂
+    g.moveTo(0, -4.6); g.lineTo(5, -8);    // 右臂
+    g.moveTo(0, 0.4); g.lineTo(-4, 4.2);   // 左腿
+    g.moveTo(0, 0.4); g.lineTo(4, 4.2);    // 右腿
+  } else if (pose === 1) {
+    g.moveTo(0, -4.6); g.lineTo(-3, -11);  // 双臂上举拉伞绳
+    g.moveTo(0, -4.6); g.lineTo(3, -11);
+    g.moveTo(0, 0.4); g.lineTo(-2.5, 4);
+    g.moveTo(0, 0.4); g.lineTo(2.5, 4);
+  } else {
+    g.moveTo(0, -4.6); g.lineTo(-3, -1.4); // 手臂放下
+    g.moveTo(0, -4.6); g.lineTo(3, -1.4);
+    g.moveTo(0, 0.4); g.lineTo(-2, 5);     // 腿站直
+    g.moveTo(0, 0.4); g.lineTo(2, 5);
+  }
+  g.stroke();
+}
+
+function drawParatroopers(g, t) {
+  if (!paratroopers.length) return;
+  for (const p of paratroopers) {
+    const sx = p.x - CFG.ox;
+    if (sx < -60 || sx > VW + 60) continue;
+    const a = p.state === 'fade' ? p.fade : 1;
+    const keepA = g.globalAlpha;
+    g.globalAlpha = keepA * a;
+    if (p.chute > 0.02) drawChute(g, sx, p.y, p.chute, p.s);
+    g.save();
+    g.translate(sx, p.y);
+    g.scale(p.s, p.s);
+    drawParatrooperBody(g, p);
+    g.restore();
+    g.globalAlpha = keepA;
+    drawCalls++;
+  }
+  g.setTransform(DBASE, 0, 0, DBASE, 0, 0);
+}
+
+/* =========================================================================
  * 10. 开花波前
  * ======================================================================= */
 const WAVE_LEN = 1500;    // 波前空间周期（世界单位）
@@ -2085,6 +2398,8 @@ function tick(ts) {
   if (CFG.drift > 0) { cam.x += CFG.drift * dt; if (cam.x > 40000) cam.x -= 80000; }
   updateClouds(dt, cloudRnd);
   updatePlanes(dt, t, planeRnd);
+  updateBiplanes(dt, t, biplaneRnd);
+  updateParatroopers(dt, t);
   updateHerds(dt, t);
   updateConfetti(dt, t);
 
@@ -2098,13 +2413,16 @@ function tick(ts) {
   drawRidges(ctx);
   drawGround(ctx, t);
   drawHerds(ctx, t);
+  drawBiplanes(ctx, t);                 // 低空飞机在草地之上、前景草叶之下
   ctx.setTransform(DBASE, 0, 0, DBASE, 0, 0);
   drawFringe(ctx, t);
   ctx.setTransform(DBASE, 0, 0, DBASE, 0, 0);
   drawConfetti(ctx);                    // 彩纸在近景，压在草叶之上
+  drawParatroopers(ctx, t);             // 跳伞是彩蛋，压在最上层
   ctx.setTransform(DBASE, 0, 0, DBASE, 0, 0);
   ctx.globalAlpha = 1;
   ctx.drawImage(gradeCv, 0, 0, VW, VH);
+
 
   if (CFG.debug) {
     ctx.save();
@@ -2152,7 +2470,7 @@ function reportStats() {
 }
 
 /* =========================================================================
- * 15. 对外接口
+ * 16. 对外接口
  * ======================================================================= */
 window.meadow = {
   get config() { return CFG; },
@@ -2169,7 +2487,7 @@ window.meadow = {
         else if (k === 'density' || k === 'veil' || k === 'scrim' || k === 'horizon' ||
                  k === 'cloudLife' || k === 'cloudDensity' || k === 'cloudSpeed' ||
                  k === 'animals' || k === 'animalDensity' || k === 'planes' ||
-                 k === 'planeInterval') needScene = true;
+                 k === 'planeInterval' || k === 'biplane' || k === 'biplaneInterval') needScene = true;
       }
       CFG[k] = v;
     }
@@ -2216,6 +2534,7 @@ window.meadow = {
              cloudSpeedPx: Math.round(vSum / Math.max(1, nLive) * 10) / 10,
              cloudLife: Math.round(CFG.cloudLife),
              planes: planes.length, planeTotal: planeCount, confetti: confetti.length,
+             biplanes: biplanes.length, chutes: paratroopers.length,
              confVy: confetti.length ? Math.round(confetti.reduce((a,c)=>a+c.vy,0)/confetti.length) : 0,
              confMaxY: confetti.length ? Math.round(Math.max(...confetti.map(c=>c.y))) : 0,
              /* 淡出是否真的在 85% 处起效，靠这一项判定：最淡的那片的不透明度 */
@@ -2472,6 +2791,30 @@ window.meadow = {
   },
   rebuild: rebuildAll,
 
+  /** 诊断用：强制生成一架低空双翼机（绕过随机间隔），返回其屏幕坐标。
+   *  仅当屏上还没有时生效，保持"至多一架"的约束不被破坏。 */
+  __spawnBiplane: function () {
+    if (biplanes.length) return null;
+    spawnBiplane(0, mulberry32((Date.now() & 0xffff) >>> 0));
+    const b = biplanes[biplanes.length - 1];
+    return b ? { x: Math.round(b.x - CFG.ox), y: Math.round(b.y * HY) } : null;
+  },
+  /** 诊断用：低空双翼机当前屏幕坐标（供回归脚本定位点击） */
+  __biplanes: function () {
+    return biplanes.map(b => ({
+      x: Math.round(b.x - CFG.ox), y: Math.round(b.y * HY),
+      ejected: b.ejected, s: Math.round(b.s * 100) / 100,
+    }));
+  },
+  /** 诊断用：跳伞中的飞行员（含状态机阶段与落地高度） */
+  __paratroopers: function () {
+    return paratroopers.map(p => ({
+      x: Math.round(p.x - CFG.ox), y: Math.round(p.y),
+      state: p.state, chute: Math.round(p.chute * 100) / 100,
+      landY: Math.round(p.landY), fade: Math.round(p.fade * 100) / 100,
+    }));
+  },
+
   /** 宿主转发来的鼠标点击（坐标 = 显示器内的物理像素 = 本页的世界单位）。
    *  命中客机就洒一把彩纸，命中半径给得比机身大，否则移动中的飞机点不着。 */
   click: function (pt) {
@@ -2487,6 +2830,17 @@ window.meadow = {
       if (Math.hypot(x - px, y - py) > R) continue;
       spawnConfetti(px, py, p.vx, p.vyR * HY, planeRnd);
       return 'plane';
+    }
+
+    /* 1.5) 低空双翼机：点击触发飞行员跳伞。已触发过的（无人驾驶中）不再响应。 */
+    const RB = 50 * uiScale;
+    for (const b of biplanes) {
+      if (b.ejected) continue;
+      const bx = b.x - CFG.ox, by = b.y * HY;
+      if (Math.hypot(x - bx, y - by) > RB) continue;
+      spawnParatrooper(b, biplaneRnd);
+      b.ejected = true;
+      return 'biplane';
     }
 
     /* 2) 牛羊：以四蹄中心为原点的矩形包围盒（高度已含低头时的头）。

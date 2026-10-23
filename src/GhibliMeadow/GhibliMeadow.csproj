@@ -17,7 +17,7 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
     <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <!-- 显示名与 AppConfig.AppName 保持一致（主题改名时两处都要改） -->
     <Product>天空与草原 · 动态壁纸</Product>
     <InvariantGlobalization>true</InvariantGlobalization>

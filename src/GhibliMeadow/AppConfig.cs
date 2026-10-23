@@ -79,6 +79,15 @@ internal sealed class AppConfig
     /// <summary>客机平均出现间隔（秒），实际间隔在其 0.43~1.57 倍之间随机。</summary>
     public double PlaneInterval { get; set; } = 70;
 
+    /// <summary>
+    /// 低空红色双翼机：屏幕中部贴着地平线上方随机掠过，至多一架；
+    /// 点中它触发飞行员跳伞彩蛋（出舱 → 开伞 → 飘落 → 落地收伞站起 → 渐隐）。
+    /// </summary>
+    public bool Biplane { get; set; } = true;
+
+    /// <summary>双翼机平均出现间隔（秒），实际间隔在其 0.5~1.6 倍之间随机。</summary>
+    public double BiplaneInterval { get; set; } = 60;
+
     // ---- 牛羊 ----
 
     /// <summary>是否显示远景的牛羊。</summary>
@@ -193,6 +202,7 @@ internal sealed class AppConfig
         IconScrim = Math.Clamp(IconScrim, 0.0, 0.70);
         Horizon = Math.Clamp(Horizon, 0.30, 0.75);
         PlaneInterval = Math.Clamp(PlaneInterval, 2, 600);
+        BiplaneInterval = Math.Clamp(BiplaneInterval, 15, 600);
         /* 以下四项的区间必须与页面侧 meadow.js 的 CFG 完全一致：
          * cloudLife [20,400] / cloudDensity [0,3] / cloudSpeed [0,4] / animalDensity [0,2.5] */
         CloudLife = Math.Clamp(CloudLife, 20, 400);

@@ -209,6 +209,11 @@ internal sealed class WallpaperApp : ApplicationContext
         AddChoice(planes, "显示（推荐）", () => SetPlanes(true), () => _cfg.Planes);
         menu.Items.Add(planes);
 
+        var biplane = new ToolStripMenuItem("低空双翼机（点它触发跳伞）");
+        AddChoice(biplane, "不显示", () => SetBiplane(false), () => !_cfg.Biplane);
+        AddChoice(biplane, "显示（推荐）", () => SetBiplane(true), () => _cfg.Biplane);
+        menu.Items.Add(biplane);
+
         /* 三个点击彩蛋共用同一个开关 */
         var egg = new ToolStripMenuItem("彩蛋（点飞机洒彩纸 / 点牛羊翻倒 / 点云分裂）");
         AddChoice(egg, "开启", () => SetEasterEgg(true), () => _cfg.EasterEgg);
@@ -606,6 +611,16 @@ internal sealed class WallpaperApp : ApplicationContext
         if (_cfg.Planes == on) return;
         _cfg.Planes = on;
         SaveConfig();
+        _ = PushLiveConfig();
+    }
+
+    private void SetBiplane(bool on)
+    {
+        SetStatus(on ? "已开启低空双翼机（点它触发跳伞）" : "已关闭低空双翼机");
+        if (_cfg.Biplane == on) return;
+        _cfg.Biplane = on;
+        SaveConfig();
+        /* needScene：关闭时把屏上已有的双翼机与跳伞中的飞行员一并清掉 */
         _ = PushLiveConfig();
     }
 

@@ -235,6 +235,8 @@ internal sealed class WallpaperSurface : IDisposable
         AddD("cloudSpeed", _cfg.CloudSpeed);
         AddB("planes", _cfg.Planes);
         AddD("planeInterval", _cfg.PlaneInterval);
+        AddB("biplane", _cfg.Biplane);
+        AddD("biplaneInterval", _cfg.BiplaneInterval);
         AddB("egg", _cfg.EasterEgg);
         AddB("animals", _cfg.Animals);
         AddD("animalDensity", _cfg.AnimalDensity);
@@ -265,6 +267,8 @@ internal sealed class WallpaperSurface : IDisposable
             ["cloudSpeed"] = cfg.CloudSpeed,
             ["planes"] = cfg.Planes,
             ["planeInterval"] = cfg.PlaneInterval,
+            ["biplane"] = cfg.Biplane,
+            ["biplaneInterval"] = cfg.BiplaneInterval,
             ["egg"] = cfg.EasterEgg,
             ["animals"] = cfg.Animals,
             ["animalDensity"] = cfg.AnimalDensity,
@@ -292,6 +296,7 @@ internal sealed class WallpaperSurface : IDisposable
                     "window.meadow && window.meadow.click({{x:{0:0.#},y:{1:0.#}}})", x, y));
             var kind = r == null ? "" : r.Trim('"');
             if (kind == "plane") Log.Info($"{_screen.DeviceName}: 点中客机 → 投放彩纸 @ {x:0},{y:0}");
+            else if (kind == "biplane") Log.Info($"{_screen.DeviceName}: 点中双翼机 → 飞行员跳伞 @ {x:0},{y:0}");
             else if (kind == "cow" || kind == "sheep")
                 Log.Info($"{_screen.DeviceName}: 点中{(kind == "cow" ? "牛" : "羊")} → 掀翻倒地 @ {x:0},{y:0}");
             else if (kind == "cloud") Log.Info($"{_screen.DeviceName}: 点中云 → 分裂 @ {x:0},{y:0}");
